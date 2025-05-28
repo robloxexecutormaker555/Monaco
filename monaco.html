@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CattyX Executor</title>
+  <style>
+    body {
+      margin: 0;
+      background: #1e1e1e;
+      color: white;
+      font-family: "Segoe UI", sans-serif;
+    }
+
+    #tabs {
+      display: flex;
+      align-items: center;
+      background: #121212;
+      padding: 4px 8px;
+      border-bottom: 1px solid #2e2e2e;
+    }
+
+    .tab {
+      background: #1c1c1c;
+      color: #ccc;
+      border: 1px solid #333;
+      border-radius: 6px 6px 0 0;
+      padding: 6px 12px;
+      margin-right: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    .tab.active {
+      background: #2c2c2c;
+      color: #fff;
+      border-bottom: none;
+    }
+
+    .tab .title {
+      user-select: none;
+    }
+
+    .tab .close {
+      margin-left: 8px;
+      color: #888;
+      cursor: pointer;
+      font-weight: bold;
+      transition: color 0.2s;
+    }
+
+    .tab .close:hover {
+      color: #fff;
+    }
+
+    .tab input {
+      background: transparent;
+      border: none;
+      color: white;
+      outline: none;
+      font: inherit;
+      width: 100px;
+    }
+
+    #addTab {
+      background: none;
+      border: none;
+      color: #999;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: color 0.2s;
+    }
+
+    #addTab:hover {
+      color: #fff;
+    }
+
+    #editor {
+      height: calc(100vh - 40px);
+      width: 100%;
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="tabs">
+    <button id="addTab">+</button>
+  </div>
+  <div id="editor"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+  <script>
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+
+    require(['vs/editor/editor.main'], function () {
+      const editor = monaco.editor.create(document.getElementById('editor'), {
+        language: 'lua',
+        theme: 'vs-dark',
+        fontSize: 14,
+        automaticLayout: true,
+        cursorBlinking: 'phase',
+        cursorSmoothCaretAnimation: true,
+        wordWrap: 'on'
+      });
+
+      monaco.languages.registerCompletionItemProvider('lua', {
+        provideCompletionItems: () => {
+          const suggestions = [
+            {
+              label: 'game',
+              kind: monaco.languages.CompletionItemKind.Variable,
+              insertText: 'game',
+              detail: 'Global game object'
+            },
+            {
+              label: 'workspace',
+              kind: monaco.languages.CompletionItemKind.Variable,
+              insertText: 'workspace',
+              detail: 'Global workspace object'
+            },
+            {
+              label: 'print',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'print($1)',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              detail: 'Print to output'
+            },
+            {
+              label: 'wait',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'wait($1)',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              detail: 'Yield thread for a delay'
+            },
+            {
+              label: 'Instance.new',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'Instance.new("$1")',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              detail: 'Create a new instance'
+            }
+          ];
+          return { suggestions: suggestions };
+        }
+      });
+
+      const tabsContainer = document.getElementById('tabs');
+      const addTabButton = document.getElementById('addTab');
+      let models = [];
+      let currentTab = -1;
+      let tabCounter = 2;
+
+      function createTab(name = `Tab ${tabCounter++}`) {
+        const model = monaco.editor.createModel('', 'lua');
+        models.push(model);
+
+        const tab = document.createElement('div');
+        tab.className = 'tab';
+
+        const title = document.createElement('span');
+        title.className = 'title';
+        title.textContent = name;
+
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'close';
+        closeBtn.textContent = '✕';
+
+        tab.appendChild(title);
+        tab.appendChild(closeBtn);
+        tabsContainer.insertBefore(tab, addTabButton);
+
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const index = Array.from(tabsContainer.children).indexOf(tab);
+          tabsContainer.removeChild(tab);
+          models.splice(index, 1);
+          if (index === currentTab) {
+            if (models.length > 0) {
+              switchTab(0);
+            } else {
+              editor.setModel(null);
+              currentTab = -1;
+            }
+          } else if (index < currentTab) {
+            currentTab--;
+          }
+        });
+
+        tab.addEventListener('click', () => {
+          switchTab(models.indexOf(model));
+        });
+
+        title.addEventListener('dblclick', () => {
+          const input = document.createElement('input');
+          input.value = title.textContent;
+          tab.replaceChild(input, title);
+          input.focus();
+          input.addEventListener('blur', () => {
+            title.textContent = input.value || name;
+            tab.replaceChild(title, input);
+          });
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              input.blur();
+            }
+          });
+        });
+
+        switchTab(models.length - 1);
+      }
+
+      function switchTab(index) {
+        currentTab = index;
+        const tabElements = Array.from(tabsContainer.querySelectorAll('.tab'));
+        tabElements.forEach((t, i) => {
+          t.classList.toggle('active', i === index);
+        });
+        editor.setModel(models[index]);
+      }
+
+      addTabButton.addEventListener('click', () => {
+        createTab();
+      });
+
+      createTab("Tab 1");
+    });
+  </script>
+</body>
+</html>
